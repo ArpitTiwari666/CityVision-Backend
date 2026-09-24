@@ -1,0 +1,22 @@
+# --- Core API -----------------------------------------------------------
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+pydantic-settings==2.5.2
+sqlalchemy==2.0.35
+python-multipart==0.0.9
+websockets==13.1
+
+# --- Auth -----------------------------------------------------------------
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# --- ANPR (only required when DEMO_MODE=false) -----------------------------
+# Install these on a machine with the appropriate runtime (CPU is fine,
+# GPU optional) once you have YOLO plate-detector weights to point
+# YOLO_PLATE_MODEL_PATH at. The backend runs fully in DEMO_MODE without them.
+ultralytics==8.3.28
+paddleocr==2.9.1
+paddlepaddle==2.6.2
+opencv-python-headless==4.10.0.84
+numpy==1.26.4

@@ -25,55 +25,106 @@ from .routers import (
 )
 
 
+# ============================================================
+# SIMULATOR TASK
+# ============================================================
+
 _simulator_task: asyncio.Task | None = None
 
+
+# ============================================================
+# APPLICATION LIFESPAN
+# ============================================================
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _simulator_task
 
+    # --------------------------------------------------------
+    # Create required directories
+    # --------------------------------------------------------
+
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     os.makedirs(settings.REPORT_DIR, exist_ok=True)
 
+    # --------------------------------------------------------
     # Database initialization
+    # --------------------------------------------------------
+
     try:
         Base.metadata.create_all(bind=engine)
 
         db = SessionLocal()
+
         try:
             seed(db)
+
         finally:
             db.close()
 
     except Exception as exc:
-        # Do not prevent FastAPI from starting just because
-        # demo/database initialization has a problem.
-        print(f"[WARNING] Database initialization failed: {exc}")
+        # Database problems should not prevent the API
+        # from starting in DEMO MODE.
+        print(
+            f"[WARNING] Database initialization failed: {exc}"
+        )
 
+    # --------------------------------------------------------
     # Start demo simulator
+    # --------------------------------------------------------
+
     try:
         _simulator_task = asyncio.create_task(
             simulator_run_forever()
         )
+
+        print("[INFO] CityVision simulator started.")
+
     except Exception as exc:
-        print(f"[WARNING] Simulator could not start: {exc}")
+        print(
+            f"[WARNING] Simulator could not start: {exc}"
+        )
+
+    # --------------------------------------------------------
+    # Application is ready
+    # --------------------------------------------------------
+
+    print("[INFO] CityVision AI Backend is starting...")
 
     yield
 
+    # --------------------------------------------------------
+    # Shutdown simulator
+    # --------------------------------------------------------
+
     if _simulator_task:
+
         _simulator_task.cancel()
 
         try:
             await _simulator_task
+
         except asyncio.CancelledError:
             pass
 
+        except Exception as exc:
+            print(
+                f"[WARNING] Simulator shutdown error: {exc}"
+            )
+
+    print("[INFO] CityVision AI Backend stopped.")
+
+
+# ============================================================
+# FASTAPI APPLICATION
+# ============================================================
 
 app = FastAPI(
     title=settings.APP_NAME,
     version="1.0.0",
     description=(
-        "Backend for the CityVision AI Smart City Traffic Command Center. "
+        "Backend for the CityVision AI Smart City "
+        "Traffic Command Center. "
         f"Running with DEMO_MODE="
         f"{'ON' if settings.DEMO_MODE else 'OFF'}."
     ),
@@ -81,9 +132,9 @@ app = FastAPI(
 )
 
 
-# ---------------------------------------------------------
+# ============================================================
 # CORS
-# ---------------------------------------------------------
+# ============================================================
 
 app.add_middleware(
     CORSMiddleware,
@@ -94,9 +145,9 @@ app.add_middleware(
 )
 
 
-# ---------------------------------------------------------
+# ============================================================
 # SYSTEM ENDPOINTS
-# ---------------------------------------------------------
+# ============================================================
 
 @app.get("/", tags=["System"])
 def root():
@@ -113,14 +164,15 @@ def root():
 def health():
     return {
         "status": "operational",
+        "service": "CityVision AI Backend",
         "demo_mode": settings.DEMO_MODE,
         "app": settings.APP_NAME,
     }
 
 
-# ---------------------------------------------------------
+# ============================================================
 # API ROUTERS
-# ---------------------------------------------------------
+# ============================================================
 
 app.include_router(auth.router)
 app.include_router(dashboard.router)

@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .database import Base, engine, SessionLocal
-from . import models
+from . import models  # noqa: F401
 from .seed_data import seed
 from .simulator import run_forever as simulator_run_forever
 
@@ -24,6 +24,7 @@ from .routers import (
     settings as settings_router,
 )
 
+
 _simulator_task: asyncio.Task | None = None
 
 
@@ -34,25 +35,31 @@ async def lifespan(app: FastAPI):
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     os.makedirs(settings.REPORT_DIR, exist_ok=True)
 
-    # Create database tables
-    Base.metadata.create_all(bind=engine)
-
-    # Seed demo data
-    db = SessionLocal()
-
+    # Database initialization
     try:
-        seed(db)
-    finally:
-        db.close()
+        Base.metadata.create_all(bind=engine)
 
-    # Start simulator
-    _simulator_task = asyncio.create_task(
-        simulator_run_forever()
-    )
+        db = SessionLocal()
+        try:
+            seed(db)
+        finally:
+            db.close()
+
+    except Exception as exc:
+        # Do not prevent FastAPI from starting just because
+        # demo/database initialization has a problem.
+        print(f"[WARNING] Database initialization failed: {exc}")
+
+    # Start demo simulator
+    try:
+        _simulator_task = asyncio.create_task(
+            simulator_run_forever()
+        )
+    except Exception as exc:
+        print(f"[WARNING] Simulator could not start: {exc}")
 
     yield
 
-    # Stop simulator
     if _simulator_task:
         _simulator_task.cancel()
 
@@ -66,8 +73,7 @@ app = FastAPI(
     title=settings.APP_NAME,
     version="1.0.0",
     description=(
-        "Backend for the CityVision AI Smart City Traffic "
-        "Command Center. "
+        "Backend for the CityVision AI Smart City Traffic Command Center. "
         f"Running with DEMO_MODE="
         f"{'ON' if settings.DEMO_MODE else 'OFF'}."
     ),
@@ -75,59 +81,29 @@ app = FastAPI(
 )
 
 
-# ============================================================
+# ---------------------------------------------------------
 # CORS
-# ============================================================
-
-ALLOWED_ORIGINS = [
-    # GitHub Pages production frontend
-    "https://arpittiwari666.github.io",
-
-    # Local development
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:4173",
-    "http://127.0.0.1:4173",
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
-
+# ---------------------------------------------------------
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-# ============================================================
-# ROUTERS
-# ============================================================
-
-app.include_router(auth.router)
-app.include_router(dashboard.router)
-app.include_router(cameras.router)
-app.include_router(live_feed.router)
-app.include_router(vehicles.router)
-app.include_router(gis.router)
-app.include_router(analytics.router)
-app.include_router(alerts.router)
-app.include_router(reports.router)
-app.include_router(settings_router.router)
-
-
-# ============================================================
+# ---------------------------------------------------------
 # SYSTEM ENDPOINTS
-# ============================================================
+# ---------------------------------------------------------
 
-@app.get("/")
+@app.get("/", tags=["System"])
 def root():
     return {
         "status": "online",
         "service": "CityVision AI Backend",
-        "message": "CityVision API is running",
+        "message": "FastAPI backend is running",
         "docs": "/docs",
         "health": "/api/health",
     }
@@ -140,3 +116,19 @@ def health():
         "demo_mode": settings.DEMO_MODE,
         "app": settings.APP_NAME,
     }
+
+
+# ---------------------------------------------------------
+# API ROUTERS
+# ---------------------------------------------------------
+
+app.include_router(auth.router)
+app.include_router(dashboard.router)
+app.include_router(cameras.router)
+app.include_router(live_feed.router)
+app.include_router(vehicles.router)
+app.include_router(gis.router)
+app.include_router(analytics.router)
+app.include_router(alerts.router)
+app.include_router(reports.router)
+app.include_router(settings_router.router)
